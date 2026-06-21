@@ -220,13 +220,14 @@ document.getElementById('btn-delete-confirm').addEventListener('click', async ()
 const videoEl       = document.getElementById('camera-viewfinder');
 const captureCanvas = document.getElementById('capture-canvas');
 let cameraStream    = null;
+let selectedCameraId = null;
 
-async function startCamera() {
+async function startCamera(deviceId = null) {
+  const videoConstraint = deviceId
+    ? { deviceId: { exact: deviceId }, width: { ideal: 4096 }, height: { ideal: 3072 } }
+    : { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } };
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } },
-      audio: false,
-    });
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: false });
   } catch {
     try {
       cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -236,6 +237,7 @@ async function startCamera() {
     }
   }
   videoEl.srcObject = cameraStream;
+  if (!isIOSDevice()) await populateCameraSelect();
 }
 
 function stopCamera() {
@@ -244,6 +246,41 @@ function stopCamera() {
     cameraStream = null;
     videoEl.srcObject = null;
   }
+}
+
+async function populateCameraSelect() {
+  const selectEl = document.getElementById('camera-select');
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+
+  // Sync selectedCameraId from the active stream track
+  if (cameraStream) {
+    const track = cameraStream.getVideoTracks()[0];
+    if (track) selectedCameraId = track.getSettings().deviceId || selectedCameraId;
+  }
+
+  selectEl.innerHTML = '';
+  videoInputs.forEach((device, i) => {
+    const opt = document.createElement('option');
+    opt.value = device.deviceId;
+    opt.textContent = device.label || `Camera ${i + 1}`;
+    opt.selected = device.deviceId === selectedCameraId;
+    selectEl.appendChild(opt);
+  });
+
+  selectEl.style.display = videoInputs.length > 1 ? 'block' : 'none';
+}
+
+document.getElementById('camera-select').addEventListener('change', async (e) => {
+  selectedCameraId = e.target.value;
+  stopCamera();
+  await startCamera(selectedCameraId);
+});
+
+if (!isIOSDevice()) {
+  navigator.mediaDevices.addEventListener('devicechange', async () => {
+    if (cameraStream) await populateCameraSelect();
+  });
 }
 
 function captureFrame() {
