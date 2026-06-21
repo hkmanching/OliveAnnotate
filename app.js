@@ -80,6 +80,10 @@ async function getBlobRecord(id) {
   const entry = await db.get('blobs', id);
   return entry ? entry.blob : null;
 }
+async function deleteImageAndBlob(id) {
+  await db.delete('images', id);
+  await db.delete('blobs', id);
+}
 
 // ── Setup modal ───────────────────────────────────────────────
 const setupModal      = document.getElementById('setup-modal');
@@ -168,8 +172,13 @@ async function renderHomeGrid() {
       <div class="card-footer">
         <span class="badge badge-${record.status}">${record.status}</span>
         <span style="font-size:0.7rem;color:var(--color-panel-alt)">${annCount} ann.</span>
+        <button class="card-delete-btn" aria-label="Delete image" title="Delete image">🗑</button>
       </div>
     `;
+    card.querySelector('.card-delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDeleteModal(record.id);
+    });
     card.addEventListener('click', () => openAnnotateScreen(record.id));
     imageGrid.appendChild(card);
   }
@@ -181,6 +190,31 @@ async function applySession() {
     sessionId ? `Session: ${sessionId}` : '';
   await renderHomeGrid();
 }
+
+// ── Delete image ──────────────────────────────────────────────
+const deleteModal = document.getElementById('delete-modal');
+let pendingDeleteId = null;
+
+function openDeleteModal(id) {
+  pendingDeleteId = id;
+  deleteModal.classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+  pendingDeleteId = null;
+  deleteModal.classList.add('hidden');
+}
+
+document.getElementById('btn-delete-cancel').addEventListener('click', closeDeleteModal);
+
+document.getElementById('btn-delete-confirm').addEventListener('click', async () => {
+  if (!pendingDeleteId) return;
+  const id = pendingDeleteId;
+  closeDeleteModal();
+  await deleteImageAndBlob(id);
+  showToast('Image deleted.');
+  await renderHomeGrid();
+});
 
 // ── Camera ────────────────────────────────────────────────────
 const videoEl       = document.getElementById('camera-viewfinder');

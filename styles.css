@@ -255,6 +255,28 @@ html, body {
 .badge-annotated { background: #C0DEC8; color: #2A5C3A; }
 .badge-skipped  { background: #D8D0C8; color: #5C5040; }
 
+.card-delete-btn {
+  background: none;
+  border: none;
+  color: var(--color-panel-alt);
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.card-delete-btn:active {
+  color: #B84040;
+  background: #F0D8D8;
+}
+
 /* ── Setup modal (first-launch) ────────────────────────────── */
 .modal-overlay {
   position: fixed;

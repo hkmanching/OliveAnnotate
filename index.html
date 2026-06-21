@@ -186,6 +186,21 @@
     </div>
   </div>
 
+  <!-- Delete confirmation modal -->
+  <div class="modal-overlay hidden" id="delete-modal" role="dialog"
+       aria-modal="true" aria-labelledby="delete-title">
+    <div class="modal-box">
+      <h2 id="delete-title">Delete Image?</h2>
+      <p style="font-size:0.85rem; color:var(--color-panel-alt); margin-top:8px;">
+        This will permanently remove the image and all its annotations. This cannot be undone.
+      </p>
+      <div style="display:flex; gap:12px; margin-top:20px;">
+        <button class="btn btn-ghost"   id="btn-delete-cancel"  style="flex:1">Cancel</button>
+        <button class="btn btn-danger"  id="btn-delete-confirm" style="flex:1">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
