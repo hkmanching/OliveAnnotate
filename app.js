@@ -295,6 +295,7 @@ async function storeNewImage(blob, width, height) {
     image_width:    width,
     image_height:   height,
     annotator,
+    device_ua:      navigator.userAgent,
     image_rating:   null,
     notes:          '',
     annotations:    [],
