@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="80" fill="#3A2E26"/>
+  <!-- Olive branch leaves -->
+  <ellipse cx="256" cy="155" rx="22" ry="50" fill="#4A7C59" transform="rotate(-30 256 155)"/>
+  <ellipse cx="295" cy="140" rx="22" ry="50" fill="#4A7C59" transform="rotate(10 295 140)"/>
+  <ellipse cx="218" cy="140" rx="22" ry="50" fill="#4A7C59" transform="rotate(-60 218 140)"/>
+  <ellipse cx="325" cy="180" rx="20" ry="44" fill="#4A7C59" transform="rotate(30 325 180)"/>
+  <ellipse cx="192" cy="175" rx="20" ry="44" fill="#4A7C59" transform="rotate(-80 192 175)"/>
+  <!-- Stem -->
+  <line x1="256" y1="225" x2="256" y2="380" stroke="#5C4A3A" stroke-width="14" stroke-linecap="round"/>
+  <!-- Gall / knot dots -->
+  <circle cx="234" cy="290" r="20" fill="#D4780A"/>
+  <circle cx="275" cy="330" r="14" fill="#D4780A"/>
+  <circle cx="248" cy="360" r="11" fill="#D4780A"/>
+  <!-- Monogram -->
+  <text x="256" y="460" font-family="system-ui, sans-serif" font-size="48" font-weight="700"
+        fill="#F3EFE4" text-anchor="middle" letter-spacing="6">OA</text>
+</svg>
