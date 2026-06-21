@@ -536,11 +536,27 @@ html, body {
   color: #fff;
 }
 
+/* Required asterisk rendered via JS label; make it amber */
+.panel-label {
+  color: var(--color-primary);
+}
+
+/* Scroll shadow so users know more content is below */
+#classification-fields {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  /* fade at bottom when scrollable */
+  mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent 100%);
+}
+
 .panel-actions {
   padding: 12px 14px;
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  border-top: 1px solid var(--color-panel-alt);
 }
 
 .panel-actions .btn { flex: 1; min-height: 42px; font-size: 0.85rem; }
@@ -611,6 +627,38 @@ html, body {
   font-size: 0.8rem;
   font-family: var(--font);
   cursor: pointer;
+  color: var(--color-text);
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.instance-actions button:active {
+  background: #F0D8D8;
+  border-color: #B84040;
+}
+
+/* Placeholder shown when a crop thumbnail cannot be generated */
+.instance-thumb-empty {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-border);
+  font-size: 1.2rem;
+}
+
+.instance-thumb-empty::after { content: '?'; }
+
+/* Empty state message inside instance list */
+.review-empty {
+  color: var(--color-panel-alt);
+  font-size: 0.9rem;
+  padding: 4px 0 8px;
 }
 
 .review-meta {
