@@ -445,35 +445,45 @@ html, body {
 }
 
 /* ── S3: Classification panel ──────────────────────────────── */
+/*
+ * The panel is position:absolute over .annotate-body so it overlays
+ * the canvas without shrinking it. Canvas size stays constant whether
+ * the panel is open or closed, keeping displayScale stable and stored
+ * coordinates accurate.
+ */
 .classification-panel {
+  position: absolute;
   background: var(--color-panel);
   color: var(--color-bg);
   display: flex;
   flex-direction: column;
-  gap: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  flex-shrink: 0;
   transition: transform 0.25s ease;
+  z-index: 10;
 }
 
-/* Landscape: right rail */
+/* Landscape: slides in from the right */
 @media (orientation: landscape) {
   .classification-panel {
+    right: 0;
+    top: 0;
+    bottom: 0;
     width: 220px;
     border-left: 2px solid var(--color-panel-alt);
-    height: 100%;
-    transform: translateX(220px);
+    transform: translateX(100%);
   }
   .classification-panel.open {
     transform: translateX(0);
   }
 }
 
-/* Portrait: bottom sheet */
+/* Portrait: slides up from the bottom */
 @media (orientation: portrait) {
   .classification-panel {
-    width: 100%;
+    left: 0;
+    right: 0;
+    bottom: 0;
     max-height: 52%;
     border-top: 2px solid var(--color-panel-alt);
     transform: translateY(100%);
