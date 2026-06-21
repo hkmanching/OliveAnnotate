@@ -321,10 +321,13 @@ html, body {
 }
 
 #camera-viewfinder {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
+  background: #000;
 }
 
 .camera-controls {
@@ -428,8 +431,11 @@ html, body {
 .annotate-body {
   flex: 1;
   display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   position: relative;
+  background: #1A1410;
 }
 
 #annotation-canvas {
