@@ -309,9 +309,8 @@ async function storeNewImage(blob, width, height) {
 // ── Classification schema ─────────────────────────────────────
 const CLASSIFICATION_SCHEMA = [
   {
-    field: 'severity', label: 'Severity', required: true,
+    field: 'severity', label: 'Severity', required: false,
     options: [
-      { value: 0, label: '0 – Absent' },
       { value: 1, label: '1 – Scattered' },
       { value: 2, label: '2 – Moderate' },
       { value: 3, label: '3 – Substantial' },
@@ -319,7 +318,7 @@ const CLASSIFICATION_SCHEMA = [
     ],
   },
   {
-    field: 'gall_age', label: 'Gall Age', required: true,
+    field: 'gall_age', label: 'Gall Age', required: false,
     options: [
       { value: 'fresh', label: 'Fresh' },
       { value: 'aged',  label: 'Aged' },
