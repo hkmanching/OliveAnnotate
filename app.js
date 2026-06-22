@@ -42,12 +42,14 @@ function getSession() {
   return {
     annotator: localStorage.getItem('oa_annotator') || '',
     sessionId: localStorage.getItem('oa_session')   || '',
+    location:  localStorage.getItem('oa_location')  || '',
   };
 }
 
-function saveSession(annotator, sessionId) {
+function saveSession(annotator, sessionId, location) {
   localStorage.setItem('oa_annotator', annotator);
   localStorage.setItem('oa_session',   sessionId);
+  localStorage.setItem('oa_location',  location || '');
 }
 
 // ── IndexedDB ─────────────────────────────────────────────────
@@ -89,13 +91,15 @@ async function deleteImageAndBlob(id) {
 const setupModal      = document.getElementById('setup-modal');
 const inputAnnotator  = document.getElementById('input-annotator');
 const inputSession    = document.getElementById('input-session');
+const inputLocation   = document.getElementById('input-location');
 const btnSetupConfirm = document.getElementById('btn-setup-confirm');
 
 function openSetupModal() {
-  const { annotator, sessionId } = getSession();
+  const { annotator, sessionId, location } = getSession();
   const isFirstLaunch = !annotator && !sessionId;
   inputAnnotator.value = annotator;
   inputSession.value   = sessionId;
+  inputLocation.value  = location;
   btnSetupConfirm.textContent = isFirstLaunch ? 'Start Session' : 'Update Session';
   setupModal.classList.remove('hidden');
   inputAnnotator.focus();
@@ -106,9 +110,10 @@ function closeSetupModal() { setupModal.classList.add('hidden'); }
 btnSetupConfirm.addEventListener('click', async () => {
   const annotator = inputAnnotator.value.trim();
   const sessionId = inputSession.value.trim();
-  if (!annotator || !sessionId) { showToast('Please fill in both fields.'); return; }
+  const location  = inputLocation.value.trim();
+  if (!annotator || !sessionId) { showToast('Please fill in Annotator and Session ID.'); return; }
   const isFirstLaunch = btnSetupConfirm.textContent === 'Start Session';
-  saveSession(annotator, sessionId);
+  saveSession(annotator, sessionId, location);
   closeSetupModal();
   await applySession();
   showToast(isFirstLaunch
@@ -116,7 +121,7 @@ btnSetupConfirm.addEventListener('click', async () => {
     : `Session updated to "${sessionId}".`);
 });
 
-[inputAnnotator, inputSession].forEach((inp) => {
+[inputAnnotator, inputSession, inputLocation].forEach((inp) => {
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnSetupConfirm.click(); });
 });
 
@@ -1274,16 +1279,19 @@ document.getElementById('btn-export').addEventListener('click', async () => {
 });
 
 async function buildExportZip(sessionId, annotator) {
-  const zip     = new JSZip();
-  const records = await getAllImagesForSession(sessionId);
+  const zip      = new JSZip();
+  const records  = await getAllImagesForSession(sessionId);
+  const { location } = getSession();
   const annotatedCount = records.filter((r) => r.status === 'annotated').length;
 
-  zip.file('session_metadata.json', JSON.stringify({
+  const sessionMeta = {
     session: sessionId, annotator,
     exported_at: new Date().toISOString(),
     image_count: records.length,
     annotated_count: annotatedCount,
-  }, null, 2));
+  };
+  if (location) sessionMeta.location = location;
+  zip.file('session_metadata.json', JSON.stringify(sessionMeta, null, 2));
 
   for (const record of records) {
     const blob = await getBlobRecord(record.image_blob_key);
