@@ -347,16 +347,18 @@ async function storeNewImage(blob, width, height) {
 // ── Classification schema ─────────────────────────────────────
 const CLASSIFICATION_SCHEMA = [
   {
-    field: 'severity', label: 'Severity', required: false,
+    field: 'annotation_type', label: 'Type', required: true,
     options: [
-      { value: 1, label: '1 – Scattered' },
-      { value: 2, label: '2 – Moderate' },
-      { value: 3, label: '3 – Substantial' },
-      { value: 4, label: '4 – Extreme' },
+      { value: 'gall',           label: 'Gall' },
+      { value: 'shadow',         label: 'Shadow' },
+      { value: 'scar',           label: 'Scar' },
+      { value: 'pruning_callus', label: 'Pruning Callus' },
+      { value: 'bark',           label: 'Bark' },
+      { value: 'other',          label: 'Other' },
     ],
   },
   {
-    field: 'gall_age', label: 'Gall Age', required: false,
+    field: 'gall_stage', label: 'Gall Stage', required: false,
     options: [
       { value: 'fresh', label: 'Fresh' },
       { value: 'aged',  label: 'Aged' },
@@ -364,36 +366,51 @@ const CLASSIFICATION_SCHEMA = [
     ],
   },
   {
-    field: 'location', label: 'Location', required: true,
+    field: 'gall_texture', label: 'Gall Texture', required: false, multiSelect: true,
     options: [
-      { value: 'trunk',    label: 'Trunk' },
-      { value: 'scaffold', label: 'Scaffold' },
-      { value: 'lateral',  label: 'Lateral' },
-      { value: 'shoot',    label: 'Shoot' },
+      { value: 'cracking', label: 'Cracking' },
+      { value: 'rugose',   label: 'Rugose' },
+      { value: 'smooth',   label: 'Smooth' },
     ],
   },
   {
-    field: 'confidence', label: 'Confidence', required: true,
+    field: 'location_on_tree', label: 'Location on Tree', required: false,
     options: [
-      { value: 'sure',        label: 'Sure' },
-      { value: 'unsure',      label: 'Unsure' },
-      { value: 'flag_expert', label: 'Flag Expert' },
+      { value: 'trunk',        label: 'Trunk' },
+      { value: 'branch_union', label: 'Branch Union' },
+      { value: 'branch_base',  label: 'Branch Base' },
+      { value: 'scaffold',     label: 'Scaffold' },
+      { value: 'shoot',        label: 'Shoot' },
+    ],
+  },
+  {
+    field: 'lighting', label: 'Lighting', required: false,
+    options: [
+      { value: 'sun_exposed', label: 'Sun-Exposed' },
+      { value: 'shaded',      label: 'Shaded' },
     ],
   },
 ];
 
 let currentClassification = {};
-CLASSIFICATION_SCHEMA.forEach(({ field }) => { currentClassification[field] = null; });
+CLASSIFICATION_SCHEMA.forEach(({ field, multiSelect }) => {
+  currentClassification[field] = multiSelect ? [] : null;
+});
 
 function updateSaveButtonState() {
   const allFilled = CLASSIFICATION_SCHEMA
     .filter((g) => g.required)
-    .every((g) => currentClassification[g.field] !== null);
+    .every((g) => {
+      const v = currentClassification[g.field];
+      return g.multiSelect ? v.length > 0 : v !== null;
+    });
   document.getElementById('btn-save-annotation').style.opacity = allFilled ? '1' : '0.45';
 }
 
 function resetClassificationPanel() {
-  CLASSIFICATION_SCHEMA.forEach(({ field }) => { currentClassification[field] = null; });
+  CLASSIFICATION_SCHEMA.forEach(({ field, multiSelect }) => {
+    currentClassification[field] = multiSelect ? [] : null;
+  });
   document.querySelectorAll('#classification-fields .chip').forEach((c) => {
     c.classList.remove('selected');
     c.setAttribute('aria-pressed', 'false');
@@ -409,7 +426,8 @@ function buildClassificationPanel() {
     section.className = 'panel-section';
     const labelEl = document.createElement('p');
     labelEl.className = 'panel-label';
-    labelEl.textContent = group.label + (group.required ? ' *' : '');
+    labelEl.textContent = group.label + (group.required ? ' *' : '') +
+      (group.multiSelect ? ' (select all that apply)' : '');
     section.appendChild(labelEl);
     const chipRow = document.createElement('div');
     chipRow.className = 'chip-row';
@@ -422,13 +440,27 @@ function buildClassificationPanel() {
       chip.textContent = opt.label;
       chip.setAttribute('aria-pressed', 'false');
       chip.addEventListener('click', () => {
-        chipRow.querySelectorAll('.chip').forEach((c) => {
-          c.classList.remove('selected');
-          c.setAttribute('aria-pressed', 'false');
-        });
-        chip.classList.add('selected');
-        chip.setAttribute('aria-pressed', 'true');
-        currentClassification[group.field] = opt.value;
+        if (group.multiSelect) {
+          const arr = currentClassification[group.field];
+          const idx = arr.indexOf(opt.value);
+          if (idx === -1) {
+            arr.push(opt.value);
+            chip.classList.add('selected');
+            chip.setAttribute('aria-pressed', 'true');
+          } else {
+            arr.splice(idx, 1);
+            chip.classList.remove('selected');
+            chip.setAttribute('aria-pressed', 'false');
+          }
+        } else {
+          chipRow.querySelectorAll('.chip').forEach((c) => {
+            c.classList.remove('selected');
+            c.setAttribute('aria-pressed', 'false');
+          });
+          chip.classList.add('selected');
+          chip.setAttribute('aria-pressed', 'true');
+          currentClassification[group.field] = opt.value;
+        }
         updateSaveButtonState();
       });
       chipRow.appendChild(chip);
@@ -748,7 +780,8 @@ function finalizeBbox(start, end) {
       w: Math.min(imgW, currentImgWidth  - imgX),
       h: Math.min(imgH, currentImgHeight - imgY),
     },
-    severity: null, gall_age: null, location: null, confidence: null,
+    annotation_type: null, gall_stage: null, gall_texture: [],
+    location_on_tree: null, lighting: null,
   };
   openClassificationPanel();
   redrawCanvas();
@@ -784,7 +817,8 @@ function finalizePolygon() {
   currentAnnotation = {
     id: crypto.randomUUID(), type: 'polygon',
     points: imagePoints,
-    severity: null, gall_age: null, location: null, confidence: null,
+    annotation_type: null, gall_stage: null, gall_texture: [],
+    location_on_tree: null, lighting: null,
   };
 
   polygonPoints  = [];
@@ -798,7 +832,11 @@ function finalizePolygon() {
 document.getElementById('btn-save-annotation').addEventListener('click', async () => {
   if (!currentAnnotation) return;
   const missing = CLASSIFICATION_SCHEMA
-    .filter((g) => g.required && currentClassification[g.field] === null)
+    .filter((g) => {
+      if (!g.required) return false;
+      const v = currentClassification[g.field];
+      return g.multiSelect ? v.length === 0 : v === null;
+    })
     .map((g) => g.label);
   if (missing.length > 0) { showToast(`Select: ${missing.join(', ')}`); return; }
 
@@ -973,10 +1011,11 @@ async function generateAllCropThumbnails(annotations, blob) {
 
 function formatAnnotationLabels(ann) {
   const parts = [];
-  if (ann.severity !== null && ann.severity !== undefined) parts.push(`Sev. ${ann.severity}`);
-  if (ann.gall_age)   parts.push(ann.gall_age);
-  if (ann.location)   parts.push(ann.location);
-  if (ann.confidence) parts.push(ann.confidence.replace('_', ' '));
+  if (ann.annotation_type)      parts.push(ann.annotation_type.replace('_', ' '));
+  if (ann.gall_stage)           parts.push(ann.gall_stage);
+  if (ann.gall_texture?.length) parts.push(ann.gall_texture.join(', '));
+  if (ann.location_on_tree)     parts.push(ann.location_on_tree.replace('_', ' '));
+  if (ann.lighting)             parts.push(ann.lighting.replace('_', ' '));
   return parts.length ? parts.join(' · ') : 'Unclassified';
 }
 
