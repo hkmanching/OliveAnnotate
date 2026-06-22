@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>OliveAnnotate — Generate PNG Icons</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 32px; background: #F3EFE4; color: #3A2E26; }
+    h1 { margin-bottom: 8px; }
+    p  { margin-bottom: 24px; color: #5C4A3A; font-size: 0.9rem; }
+    .row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+    .col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    canvas { border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+    button {
+      background: #D4780A; color: #fff; border: none; border-radius: 8px;
+      padding: 10px 20px; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+    }
+    button:active { opacity: 0.8; }
+    .note { margin-top: 32px; font-size: 0.8rem; color: #5C4A3A; border-top: 1px solid #C4B89A; padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>OliveAnnotate — PNG Icon Generator</h1>
+  <p>Click each button to download the PNG. Save both files to the <code>icons/</code> folder, then delete this file.</p>
+
+  <div class="row">
+    <div class="col">
+      <canvas id="c192" width="192" height="192"></canvas>
+      <button onclick="download('c192', 'icon-192.png')">Download icon-192.png</button>
+    </div>
+    <div class="col">
+      <canvas id="c512" width="512" height="512"></canvas>
+      <button onclick="download('c512', 'icon-512.png')">Download icon-512.png</button>
+    </div>
+  </div>
+
+  <p class="note">This file is a one-time utility. Delete it from the repository after saving the PNGs.</p>
+
+  <script>
+    function drawIcon(canvas) {
+      const s = canvas.width / 192;
+      const ctx = canvas.getContext('2d');
+
+      // Background — rounded rect
+      ctx.fillStyle = '#3A2E26';
+      const r = 32 * s;
+      const w = canvas.width, h = canvas.height;
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(w - r, 0);
+      ctx.quadraticCurveTo(w, 0, w, r);
+      ctx.lineTo(w, h - r);
+      ctx.quadraticCurveTo(w, h, w - r, h);
+      ctx.lineTo(r, h);
+      ctx.quadraticCurveTo(0, h, 0, h - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Helper: draw a rotated ellipse
+      function rotatedEllipse(cx, cy, rx, ry, angleDeg, color) {
+        ctx.save();
+        ctx.translate(cx * s, cy * s);
+        ctx.rotate(angleDeg * Math.PI / 180);
+        ctx.scale(1, ry / rx);
+        ctx.beginPath();
+        ctx.arc(0, 0, rx * s, 0, Math.PI * 2);
+        ctx.restore();
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+
+      // Leaves
+      rotatedEllipse(96, 60, 8, 18, -30, '#4A7C59');
+      rotatedEllipse(110, 55, 8, 18,  10, '#4A7C59');
+      rotatedEllipse(82,  55, 8, 18, -60, '#4A7C59');
+      rotatedEllipse(120, 70, 7, 16,  30, '#4A7C59');
+      rotatedEllipse(75,  68, 7, 16, -80, '#4A7C59');
+
+      // Stem
+      ctx.strokeStyle = '#5C4A3A';
+      ctx.lineWidth   = 5 * s;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(96 * s, 85 * s);
+      ctx.lineTo(96 * s, 140 * s);
+      ctx.stroke();
+
+      // Gall dots
+      ctx.fillStyle = '#D4780A';
+      ctx.beginPath(); ctx.arc(88 * s, 110 * s, 7 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(104 * s, 125 * s, 5 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(92 * s, 135 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
+
+      // Monogram "OA"
+      ctx.fillStyle   = '#F3EFE4';
+      ctx.font        = `700 ${18 * s}px system-ui, sans-serif`;
+      ctx.textAlign   = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.letterSpacing = `${2 * s}px`;
+      ctx.fillText('OA', 96 * s, 172 * s);
+    }
+
+    function download(canvasId, filename) {
+      const canvas = document.getElementById(canvasId);
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = filename;
+      a.click();
+    }
+
+    drawIcon(document.getElementById('c192'));
+    drawIcon(document.getElementById('c512'));
+  </script>
+</body>
+</html>

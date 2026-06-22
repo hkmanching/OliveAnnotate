@@ -1,4 +1,4 @@
-const VERSION    = '1.0';
+const VERSION    = '1.1';
 const CACHE_NAME = `olive-annotate-v${VERSION}`;
 
 const APP_SHELL = [
@@ -7,6 +7,8 @@ const APP_SHELL = [
   './app.js',
   './styles.css',
   './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   './icons/icon-192.svg',
   './icons/icon-512.svg',
   'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js',
