@@ -42,7 +42,19 @@
         <button class="btn btn-secondary" id="btn-export" aria-label="Export session data">
           Export
         </button>
-        <button class="btn btn-ghost" id="btn-settings" aria-label="Edit session settings" style="margin-left:auto;">
+      </div>
+      <div class="home-actions home-actions-session">
+        <button class="btn btn-ghost" id="btn-new-session" aria-label="Create new session">
+          New Session
+        </button>
+        <button class="btn btn-ghost" id="btn-edit-session" aria-label="Edit current session">
+          Edit Session
+        </button>
+        <button class="btn btn-ghost" id="btn-all-sessions" aria-label="View all sessions">
+          All Sessions
+        </button>
+        <button class="btn btn-ghost" id="btn-settings" aria-label="Settings (coming soon)"
+                disabled style="margin-left:auto;">
           ⚙
         </button>
       </div>
@@ -196,6 +208,33 @@
       <div style="display:flex; gap:12px; margin-top:20px;">
         <button class="btn btn-ghost"   id="btn-delete-cancel"  style="flex:1">Cancel</button>
         <button class="btn btn-danger"  id="btn-delete-confirm" style="flex:1">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- All Sessions modal -->
+  <div class="modal-overlay hidden" id="sessions-modal" role="dialog"
+       aria-modal="true" aria-labelledby="sessions-title">
+    <div class="modal-box">
+      <h2 id="sessions-title">All Sessions</h2>
+      <div id="sessions-list" role="list" aria-label="Sessions">
+        <!-- Session rows injected by JS -->
+      </div>
+      <button class="btn btn-ghost" id="btn-sessions-close" style="width:100%">
+        Close
+      </button>
+    </div>
+  </div>
+
+  <!-- Session delete confirmation modal -->
+  <div class="modal-overlay hidden" id="session-delete-modal" role="dialog"
+       aria-modal="true" aria-labelledby="session-delete-title">
+    <div class="modal-box">
+      <h2 id="session-delete-title">Delete Session?</h2>
+      <p id="session-delete-msg" style="font-size:0.85rem; color:var(--color-panel-alt); margin-top:8px;"></p>
+      <div style="display:flex; gap:12px; margin-top:20px;">
+        <button class="btn btn-ghost"  id="btn-session-delete-cancel"  style="flex:1">Cancel</button>
+        <button class="btn btn-danger" id="btn-session-delete-confirm" style="flex:1">Delete</button>
       </div>
     </div>
   </div>

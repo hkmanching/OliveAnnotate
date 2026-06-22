@@ -87,6 +87,13 @@ async function deleteImageAndBlob(id) {
   await db.delete('blobs', id);
 }
 
+async function deleteAllImagesForSession(sessionId) {
+  const records = await getAllImagesForSession(sessionId);
+  for (const record of records) {
+    await deleteImageAndBlob(record.id);
+  }
+}
+
 // ── Setup modal ───────────────────────────────────────────────
 const setupModal      = document.getElementById('setup-modal');
 const inputAnnotator  = document.getElementById('input-annotator');
@@ -125,7 +132,118 @@ btnSetupConfirm.addEventListener('click', async () => {
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnSetupConfirm.click(); });
 });
 
-document.getElementById('btn-settings').addEventListener('click', openSetupModal);
+// New Session — blanks session ID and location so user must enter fresh values
+document.getElementById('btn-new-session').addEventListener('click', () => {
+  const { annotator } = getSession();
+  inputAnnotator.value = annotator;
+  inputSession.value   = '';
+  inputLocation.value  = '';
+  btnSetupConfirm.textContent = 'Start Session';
+  setupModal.classList.remove('hidden');
+  inputSession.focus();
+});
+
+// Edit Session — pre-fills all current values
+document.getElementById('btn-edit-session').addEventListener('click', openSetupModal);
+
+// Settings button is disabled — no listener needed
+
+// ── All Sessions modal ────────────────────────────────────────
+const sessionsModal      = document.getElementById('sessions-modal');
+const sessionDeleteModal = document.getElementById('session-delete-modal');
+let pendingDeleteSessionId = null;
+
+async function openSessionsModal() {
+  const listEl = document.getElementById('sessions-list');
+  listEl.innerHTML = '';
+
+  const { sessionId: activeSession } = getSession();
+  const allImages = await db.getAll('images');
+
+  const sessionMap = new Map();
+  for (const record of allImages) {
+    sessionMap.set(record.session, (sessionMap.get(record.session) || 0) + 1);
+  }
+
+  if (sessionMap.size === 0) {
+    const msg = document.createElement('p');
+    msg.className = 'review-empty';
+    msg.textContent = 'No sessions found.';
+    listEl.appendChild(msg);
+  } else {
+    for (const [sid, count] of sessionMap) {
+      const row = document.createElement('div');
+      row.className = 'session-row';
+      row.setAttribute('role', 'listitem');
+      const isActive = sid === activeSession;
+      const activeBadge = isActive
+        ? '<span class="session-active-badge">Active</span>' : '';
+      row.innerHTML = `
+        <div class="session-row-info">
+          <span class="session-row-id">${sid} ${activeBadge}</span>
+          <span class="session-row-count">${count} image${count !== 1 ? 's' : ''}</span>
+        </div>
+        <button class="btn btn-danger session-row-delete"
+                data-session="${sid}"
+                aria-label="Delete session ${sid}"
+                style="padding:0 14px; min-height:38px; font-size:0.8rem; min-width:unset;">
+          Delete
+        </button>
+      `;
+      listEl.appendChild(row);
+    }
+
+    listEl.querySelectorAll('.session-row-delete').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        pendingDeleteSessionId = btn.dataset.session;
+        const count = sessionMap.get(btn.dataset.session) || 0;
+        document.getElementById('session-delete-msg').textContent =
+          `This will permanently delete session "${btn.dataset.session}" and all ${count} ` +
+          `image${count !== 1 ? 's' : ''} and annotations. This cannot be undone.`;
+        sessionDeleteModal.classList.remove('hidden');
+      });
+    });
+  }
+
+  sessionsModal.classList.remove('hidden');
+}
+
+document.getElementById('btn-all-sessions').addEventListener('click', openSessionsModal);
+document.getElementById('btn-sessions-close').addEventListener('click', () => {
+  sessionsModal.classList.add('hidden');
+});
+
+document.getElementById('btn-session-delete-cancel').addEventListener('click', () => {
+  pendingDeleteSessionId = null;
+  sessionDeleteModal.classList.add('hidden');
+});
+
+document.getElementById('btn-session-delete-confirm').addEventListener('click', async () => {
+  if (!pendingDeleteSessionId) return;
+  const sid = pendingDeleteSessionId;
+  pendingDeleteSessionId = null;
+  sessionDeleteModal.classList.add('hidden');
+  sessionsModal.classList.add('hidden');
+
+  await deleteAllImagesForSession(sid);
+
+  const { sessionId: activeSession } = getSession();
+  if (sid === activeSession) {
+    localStorage.removeItem('oa_session');
+    localStorage.removeItem('oa_location');
+    await applySession();
+    // Prompt user to start a new session
+    inputAnnotator.value = getSession().annotator;
+    inputSession.value   = '';
+    inputLocation.value  = '';
+    btnSetupConfirm.textContent = 'Start Session';
+    setupModal.classList.remove('hidden');
+    inputSession.focus();
+    showToast('Active session deleted — please start a new one.');
+  } else {
+    showToast(`Session "${sid}" deleted.`);
+  }
+});
 
 // ── Home screen ───────────────────────────────────────────────
 const imageGrid    = document.getElementById('image-grid');
