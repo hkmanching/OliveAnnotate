@@ -716,6 +716,19 @@ let displayScale   = 1;
 let currentImgWidth  = 0;
 let currentImgHeight = 0;
 
+// Pan / zoom state
+const MAX_ZOOM = 8;
+let zoomLevel = 1;
+let panX = 0;
+let panY = 0;
+
+// Multi-pointer tracking for pinch gestures
+const activePointers = new Map(); // pointerId → raw canvas {x, y}
+let gestureActive    = false;
+let prevGestureDist  = 0;
+let prevGestureMidX  = 0;
+let prevGestureMidY  = 0;
+
 // ── Canvas setup ──────────────────────────────────────────────
 const annotationCanvas    = document.getElementById('annotation-canvas');
 const classificationPanel = document.getElementById('classification-panel');
@@ -744,7 +757,8 @@ function hexToRgba(hex, alpha) {
  * Position is the top-left corner of the badge.
  */
 function drawAnnotationLabel(ctx, x, y, label, color) {
-  const pad = 4, fs = 13;
+  const fs  = 13 / zoomLevel;
+  const pad = 4  / zoomLevel;
   ctx.font = `bold ${fs}px system-ui, sans-serif`;
   const bw = Math.ceil(ctx.measureText(String(label)).width) + pad * 2;
   const bh = fs + pad * 2;
@@ -757,7 +771,7 @@ function drawAnnotationLabel(ctx, x, y, label, color) {
 function drawBbox(ctx, x, y, w, h, color, label) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 2.5;
+  ctx.lineWidth   = 2.5 / zoomLevel;
   ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
   if (label !== undefined) drawAnnotationLabel(ctx, x, y, label, color);
   ctx.restore();
@@ -769,23 +783,26 @@ function drawBbox(ctx, x, y, w, h, color, label) {
  * ring shows the tap target radius to hint that the polygon can be closed.
  */
 function drawVertexDot(ctx, x, y, color, showSnapRing = false) {
+  const r   = 5   / zoomLevel; // constant screen-pixel radius
+  const lw  = 1.5 / zoomLevel;
+  const snapR = SNAP_RADIUS / zoomLevel;
   ctx.save();
   if (showSnapRing) {
     ctx.strokeStyle = color;
-    ctx.lineWidth   = 1.5;
+    ctx.lineWidth   = lw;
     ctx.globalAlpha = 0.5;
-    ctx.setLineDash([4, 3]);
+    ctx.setLineDash([4 / zoomLevel, 3 / zoomLevel]);
     ctx.beginPath();
-    ctx.arc(Math.round(x), Math.round(y), SNAP_RADIUS, 0, Math.PI * 2);
+    ctx.arc(Math.round(x), Math.round(y), snapR, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
   ctx.fillStyle   = color;
   ctx.strokeStyle = '#fff';
-  ctx.lineWidth   = 1.5;
+  ctx.lineWidth   = lw;
   ctx.beginPath();
-  ctx.arc(Math.round(x), Math.round(y), 5, 0, Math.PI * 2);
+  ctx.arc(Math.round(x), Math.round(y), r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
@@ -801,7 +818,7 @@ function drawPolygon(ctx, points, color, closed, label) {
   if (points.length === 0) return;
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 2.5;
+  ctx.lineWidth   = 2.5 / zoomLevel;
   ctx.lineJoin    = 'round';
   ctx.lineCap     = 'round';
 
@@ -840,6 +857,12 @@ function redrawCanvas() {
   if (!currentImageBitmap) return;
   const ctx = annotationCanvas.getContext('2d');
   ctx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+
+  // Apply pan/zoom — all drawing below stays in base display space (image × displayScale)
+  ctx.save();
+  ctx.translate(panX, panY);
+  ctx.scale(zoomLevel, zoomLevel);
+
   ctx.drawImage(currentImageBitmap, 0, 0, annotationCanvas.width, annotationCanvas.height);
 
   // ── Confirmed annotations (green) ─────────────────
@@ -884,9 +907,9 @@ function redrawCanvas() {
       const last = polygonPoints[polygonPoints.length - 1];
       ctx.save();
       ctx.strokeStyle = '#D4780A';
-      ctx.lineWidth   = 1.5;
+      ctx.lineWidth   = 1.5 / zoomLevel;
       ctx.globalAlpha = 0.55;
-      ctx.setLineDash([6, 4]);
+      ctx.setLineDash([6 / zoomLevel, 4 / zoomLevel]);
       ctx.beginPath();
       ctx.moveTo(Math.round(last.x), Math.round(last.y));
       ctx.lineTo(Math.round(polygonLivePos.x), Math.round(polygonLivePos.y));
@@ -903,6 +926,26 @@ function redrawCanvas() {
     }));
     drawPolygon(ctx, pts, '#D4780A', true);
   }
+
+  ctx.restore(); // end pan/zoom transform
+
+  // ── Zoom level indicator (screen space, outside transform) ───
+  const btn = document.getElementById('tool-zoom-reset');
+  if (zoomLevel > 1.05) {
+    const label = `${zoomLevel.toFixed(1)}×`;
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    const tw = ctx.measureText(label).width;
+    const pad = 5, bh = 22, bw = tw + pad * 2;
+    const bx = annotationCanvas.width - bw - 8;
+    const by = 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText(label, bx + pad, by + 15);
+    if (btn) btn.style.display = 'inline-flex';
+  } else {
+    if (btn) btn.style.display = 'none';
+  }
 }
 
 function resizeAndDrawCanvas() {
@@ -916,22 +959,68 @@ function resizeAndDrawCanvas() {
   currentImgHeight = currentImageBitmap.height;
   annotationCanvas.width  = Math.round(currentImageBitmap.width  * displayScale);
   annotationCanvas.height = Math.round(currentImageBitmap.height * displayScale);
+  resetZoom();
   redrawCanvas();
 }
 
 window.addEventListener('resize', resizeAndDrawCanvas);
 
 // ── Pointer Events ────────────────────────────────────────────
-function getCanvasPos(e) {
+// Raw canvas pixels (physical, before any pan/zoom transform) — used for gesture math.
+function getRawCanvasPos(e) {
   const rect = annotationCanvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  return {
+    x: (e.clientX - rect.left) * (annotationCanvas.width  / rect.width),
+    y: (e.clientY - rect.top)  * (annotationCanvas.height / rect.height),
+  };
+}
+
+// Base display coordinates (image × displayScale) — used by all draw/annotation logic.
+// Inverts the ctx.translate(panX,panY) + ctx.scale(zoomLevel,zoomLevel) applied in redrawCanvas.
+function getCanvasPos(e) {
+  const raw = getRawCanvasPos(e);
+  return { x: (raw.x - panX) / zoomLevel, y: (raw.y - panY) / zoomLevel };
+}
+
+function clampPan() {
+  const w = annotationCanvas.width;
+  const h = annotationCanvas.height;
+  panX = Math.max(w * (1 - zoomLevel), Math.min(0, panX));
+  panY = Math.max(h * (1 - zoomLevel), Math.min(0, panY));
+}
+
+function resetZoom() {
+  zoomLevel = 1;
+  panX = 0;
+  panY = 0;
+  const btn = document.getElementById('tool-zoom-reset');
+  if (btn) btn.style.display = 'none';
 }
 
 annotationCanvas.addEventListener('pointerdown', (e) => {
-  if (currentAnnotation) return;
   if (e.button !== 0 && e.pointerType === 'mouse') return;
   e.preventDefault();
   annotationCanvas.setPointerCapture(e.pointerId);
+
+  activePointers.set(e.pointerId, getRawCanvasPos(e));
+
+  if (activePointers.size >= 2) {
+    // Second (or more) finger — enter gesture mode, cancel any in-progress draw
+    gestureActive = true;
+    isDrawing     = false;
+    drawStart     = currentDragPos = null;
+    polyTapStart  = null;
+    if (activePointers.size === 2) {
+      const pts = [...activePointers.values()];
+      prevGestureDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      prevGestureMidX = (pts[0].x + pts[1].x) / 2;
+      prevGestureMidY = (pts[0].y + pts[1].y) / 2;
+    }
+    return;
+  }
+
+  // Single pointer — draw as normal (skip if panel open or post-gesture)
+  if (currentAnnotation || gestureActive) return;
 
   if (currentTool === 'bbox') {
     drawStart = currentDragPos = getCanvasPos(e);
@@ -942,6 +1031,37 @@ annotationCanvas.addEventListener('pointerdown', (e) => {
 });
 
 annotationCanvas.addEventListener('pointermove', (e) => {
+  if (!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, getRawCanvasPos(e));
+
+  if (activePointers.size === 2) {
+    e.preventDefault();
+    const pts  = [...activePointers.values()];
+    const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    const midX = (pts[0].x + pts[1].x) / 2;
+    const midY = (pts[0].y + pts[1].y) / 2;
+
+    if (prevGestureDist > 1) {
+      const scale   = dist / prevGestureDist;
+      const newZoom = Math.max(1, Math.min(MAX_ZOOM, zoomLevel * scale));
+      // Zoom toward the pinch midpoint
+      panX = midX - (midX - panX) * (newZoom / zoomLevel);
+      panY = midY - (midY - panY) * (newZoom / zoomLevel);
+      zoomLevel = newZoom;
+    }
+    // Pan from midpoint movement
+    panX += midX - prevGestureMidX;
+    panY += midY - prevGestureMidY;
+    clampPan();
+
+    prevGestureDist = dist;
+    prevGestureMidX = midX;
+    prevGestureMidY = midY;
+
+    redrawCanvas();
+    return;
+  }
+
   if (currentTool === 'bbox' && isDrawing) {
     e.preventDefault();
     currentDragPos = getCanvasPos(e);
@@ -954,28 +1074,44 @@ annotationCanvas.addEventListener('pointermove', (e) => {
 
 annotationCanvas.addEventListener('pointerup', (e) => {
   e.preventDefault();
+  // Capture last position before removing from map
+  const upPos = getCanvasPos(e);
+  activePointers.delete(e.pointerId);
 
-  if (currentTool === 'bbox' && isDrawing) {
-    isDrawing = false;
-    finalizeBbox(drawStart, getCanvasPos(e));
-    drawStart = currentDragPos = null;
-    return;
+  if (activePointers.size > 0) return; // other pointer still on canvas
+
+  // All pointers lifted — decide whether to act or just clean up gesture state
+  if (!gestureActive) {
+    if (currentTool === 'bbox' && isDrawing) {
+      isDrawing = false;
+      finalizeBbox(drawStart, upPos);
+      drawStart = currentDragPos = null;
+      return;
+    }
+    if (currentTool === 'polygon' && polyTapStart) {
+      const dist = Math.hypot(upPos.x - polyTapStart.x, upPos.y - polyTapStart.y);
+      polyTapStart = null;
+      // Treat as a tap only if finger didn't drift more than 10 screen px
+      if (dist < 10 / zoomLevel) handlePolygonTap(upPos);
+      return;
+    }
   }
 
-  if (currentTool === 'polygon' && polyTapStart) {
-    const pos  = getCanvasPos(e);
-    const dist = Math.hypot(pos.x - polyTapStart.x, pos.y - polyTapStart.y);
-    polyTapStart = null;
-    // Treat as a tap only if pointer didn't drift more than 10 canvas px
-    if (dist < 10) handlePolygonTap(pos);
-  }
+  gestureActive  = false;
+  isDrawing      = false;
+  drawStart      = currentDragPos = null;
+  polyTapStart   = null;
 });
 
-annotationCanvas.addEventListener('pointercancel', () => {
-  isDrawing    = false;
-  drawStart    = currentDragPos = null;
-  polyTapStart = null;
-  redrawCanvas();
+annotationCanvas.addEventListener('pointercancel', (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size === 0) {
+    gestureActive = false;
+    isDrawing     = false;
+    drawStart     = currentDragPos = null;
+    polyTapStart  = null;
+    redrawCanvas();
+  }
 });
 
 annotationCanvas.addEventListener('pointerleave', () => {
@@ -1148,6 +1284,11 @@ document.getElementById('tool-done').addEventListener('click', async () => {
   await openReviewScreen();
 });
 
+document.getElementById('tool-zoom-reset').addEventListener('click', () => {
+  resetZoom();
+  redrawCanvas();
+});
+
 // ── Open annotation screen ────────────────────────────────────
 async function openAnnotateScreen(imageId) {
   currentImageId       = imageId;
@@ -1158,6 +1299,8 @@ async function openAnnotateScreen(imageId) {
   polygonPoints        = [];
   polygonLivePos       = null;
   polyTapStart         = null;
+  activePointers.clear();
+  gestureActive        = false;
   reviewMetaState      = {};
   closeClassificationPanel();
   resetClassificationPanel();
