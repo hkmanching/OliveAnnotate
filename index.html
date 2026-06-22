@@ -169,31 +169,48 @@
        aria-modal="true" aria-labelledby="setup-title">
     <div class="modal-box">
       <h2 id="setup-title">Welcome to OliveAnnotate</h2>
-      <p style="font-size:0.85rem; color:var(--color-panel-alt)">
-        Enter your name and a session ID before starting. You can change these later in Settings.
-      </p>
 
-      <div class="field-group">
-        <label for="input-annotator">Annotator name</label>
-        <input id="input-annotator" type="text" placeholder="e.g. J. Smith"
-               autocomplete="off" autocorrect="off" spellcheck="false" />
+      <!-- Previous sessions picker — shown by openStartupModal() when sessions exist -->
+      <div id="setup-sessions-section" class="hidden">
+        <p style="font-size:0.85rem; color:var(--color-panel-alt)">
+          Tap a session to resume:
+        </p>
+        <div id="setup-sessions-list" role="list">
+          <!-- Session rows injected by JS -->
+        </div>
+        <button class="btn btn-ghost" id="btn-show-new-session-form" style="width:100%">
+          + Create New Session
+        </button>
       </div>
 
-      <div class="field-group">
-        <label for="input-session">Session ID</label>
-        <input id="input-session" type="text" placeholder="e.g. COR_2025_06_25_R04"
-               autocomplete="off" autocorrect="off" spellcheck="false" />
-      </div>
+      <!-- New / edit session form -->
+      <div id="setup-form-section">
+        <p style="font-size:0.85rem; color:var(--color-panel-alt)">
+          Enter your name and a session ID before starting. You can change these later via Edit Session.
+        </p>
 
-      <div class="field-group">
-        <label for="input-location">Location <span style="font-weight:400; text-transform:none; letter-spacing:0">(optional)</span></label>
-        <input id="input-location" type="text" placeholder="e.g. Corning, CA — Block 4"
-               autocomplete="off" autocorrect="off" spellcheck="false" />
-      </div>
+        <div class="field-group">
+          <label for="input-annotator">Annotator name</label>
+          <input id="input-annotator" type="text" placeholder="e.g. J. Smith"
+                 autocomplete="off" autocorrect="off" spellcheck="false" />
+        </div>
 
-      <button class="btn btn-primary" id="btn-setup-confirm" style="width:100%">
-        Start Session
-      </button>
+        <div class="field-group">
+          <label for="input-session">Session ID</label>
+          <input id="input-session" type="text" placeholder="e.g. COR_2025_06_25_R04"
+                 autocomplete="off" autocorrect="off" spellcheck="false" />
+        </div>
+
+        <div class="field-group">
+          <label for="input-location">Location <span style="font-weight:400; text-transform:none; letter-spacing:0">(optional)</span></label>
+          <input id="input-location" type="text" placeholder="e.g. Corning, CA — Block 4"
+                 autocomplete="off" autocorrect="off" spellcheck="false" />
+        </div>
+
+        <button class="btn btn-primary" id="btn-setup-confirm" style="width:100%">
+          Start Session
+        </button>
+      </div>
     </div>
   </div>
 

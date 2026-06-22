@@ -47,9 +47,29 @@ function getSession() {
 }
 
 function saveSession(annotator, sessionId, location) {
+  const prev = localStorage.getItem('oa_session');
   localStorage.setItem('oa_annotator', annotator);
   localStorage.setItem('oa_session',   sessionId);
   localStorage.setItem('oa_location',  location || '');
+  // Clear persisted camera values when switching to a different session
+  if (prev !== sessionId) {
+    localStorage.removeItem('oa_last_camera_height');
+    localStorage.removeItem('oa_last_camera_distance');
+  }
+  const registry = getSessionsRegistry();
+  registry[sessionId] = { annotator, location: location || '' };
+  localStorage.setItem('oa_sessions_registry', JSON.stringify(registry));
+}
+
+function getSessionsRegistry() {
+  try { return JSON.parse(localStorage.getItem('oa_sessions_registry') || '{}'); }
+  catch { return {}; }
+}
+
+function deleteSessionFromRegistry(sessionId) {
+  const registry = getSessionsRegistry();
+  delete registry[sessionId];
+  localStorage.setItem('oa_sessions_registry', JSON.stringify(registry));
 }
 
 // ── IndexedDB ─────────────────────────────────────────────────
@@ -104,13 +124,83 @@ const btnSetupConfirm = document.getElementById('btn-setup-confirm');
 function openSetupModal() {
   const { annotator, sessionId, location } = getSession();
   const isFirstLaunch = !annotator && !sessionId;
+  document.getElementById('setup-title').textContent =
+    isFirstLaunch ? 'Welcome to OliveAnnotate' : 'Session Details';
   inputAnnotator.value = annotator;
   inputSession.value   = sessionId;
   inputLocation.value  = location;
   btnSetupConfirm.textContent = isFirstLaunch ? 'Start Session' : 'Update Session';
+  document.getElementById('setup-sessions-section').classList.add('hidden');
+  document.getElementById('setup-form-section').classList.remove('hidden');
   setupModal.classList.remove('hidden');
   inputAnnotator.focus();
 }
+
+async function openStartupModal() {
+  const registry = getSessionsRegistry();
+  const entries  = Object.entries(registry);
+
+  document.getElementById('setup-sessions-section').classList.add('hidden');
+  document.getElementById('setup-form-section').classList.remove('hidden');
+
+  if (entries.length > 0) {
+    // Build image-count map from DB
+    const allImages = await db.getAll('images');
+    const countMap  = new Map();
+    for (const record of allImages) {
+      countMap.set(record.session, (countMap.get(record.session) || 0) + 1);
+    }
+
+    const listEl = document.getElementById('setup-sessions-list');
+    listEl.innerHTML = '';
+    for (const [sid, meta] of entries) {
+      const count = countMap.get(sid) || 0;
+      const row   = document.createElement('button');
+      row.type      = 'button';
+      row.className = 'setup-session-row';
+      row.setAttribute('role', 'listitem');
+      const metaLine = [meta.annotator, meta.location].filter(Boolean).join(' · ');
+      row.innerHTML = `
+        <div class="setup-session-row-main">
+          <span class="setup-session-id">${sid}</span>
+          <span class="setup-session-meta">${metaLine}</span>
+        </div>
+        <span class="setup-session-count">${count} image${count !== 1 ? 's' : ''}</span>
+      `;
+      row.addEventListener('click', async () => {
+        saveSession(meta.annotator, sid, meta.location);
+        closeSetupModal();
+        await applySession();
+        showToast(`Session "${sid}" resumed.`);
+      });
+      listEl.appendChild(row);
+    }
+
+    document.getElementById('setup-title').textContent = 'Welcome Back';
+    document.getElementById('setup-sessions-section').classList.remove('hidden');
+    document.getElementById('setup-form-section').classList.add('hidden');
+  } else {
+    // No previous sessions — show blank new-session form
+    document.getElementById('setup-title').textContent = 'Welcome to OliveAnnotate';
+    inputAnnotator.value = '';
+    inputSession.value   = '';
+    inputLocation.value  = '';
+    btnSetupConfirm.textContent = 'Start Session';
+  }
+
+  setupModal.classList.remove('hidden');
+}
+
+document.getElementById('btn-show-new-session-form').addEventListener('click', () => {
+  document.getElementById('setup-title').textContent = 'New Session';
+  inputAnnotator.value = getSession().annotator || '';
+  inputSession.value   = '';
+  inputLocation.value  = '';
+  btnSetupConfirm.textContent = 'Start Session';
+  document.getElementById('setup-sessions-section').classList.add('hidden');
+  document.getElementById('setup-form-section').classList.remove('hidden');
+  inputSession.focus();
+});
 
 function closeSetupModal() { setupModal.classList.add('hidden'); }
 
@@ -134,11 +224,13 @@ btnSetupConfirm.addEventListener('click', async () => {
 
 // New Session — blanks session ID and location so user must enter fresh values
 document.getElementById('btn-new-session').addEventListener('click', () => {
-  const { annotator } = getSession();
-  inputAnnotator.value = annotator;
+  document.getElementById('setup-title').textContent = 'New Session';
+  inputAnnotator.value = getSession().annotator || '';
   inputSession.value   = '';
   inputLocation.value  = '';
   btnSetupConfirm.textContent = 'Start Session';
+  document.getElementById('setup-sessions-section').classList.add('hidden');
+  document.getElementById('setup-form-section').classList.remove('hidden');
   setupModal.classList.remove('hidden');
   inputSession.focus();
 });
@@ -226,6 +318,7 @@ document.getElementById('btn-session-delete-confirm').addEventListener('click', 
   sessionsModal.classList.add('hidden');
 
   await deleteAllImagesForSession(sid);
+  deleteSessionFromRegistry(sid);
 
   const { sessionId: activeSession } = getSession();
   if (sid === activeSession) {
@@ -1110,11 +1203,11 @@ const IMAGE_METADATA_SCHEMA = [
     options: [0,1,2,3,4,5,6,7,8,9].map((n) => ({ value: n, label: String(n) })),
   },
   {
-    field: 'camera_height', label: 'Camera Height', required: true, inputType: 'text',
+    field: 'camera_height', label: 'Camera Height', required: false, inputType: 'text',
     placeholder: 'e.g. 1.5 m',
   },
   {
-    field: 'camera_distance', label: 'Camera Distance', required: true, inputType: 'text',
+    field: 'camera_distance', label: 'Camera Distance', required: false, inputType: 'text',
     placeholder: 'e.g. 0.5 m',
   },
   {
@@ -1171,6 +1264,11 @@ function buildReviewMetaForm(record) {
   IMAGE_METADATA_SCHEMA.forEach(({ field }) => {
     reviewMetaState[field] = record[field] ?? null;
   });
+  // Pre-fill camera fields from last confirmed image in this session when not yet set
+  if (!reviewMetaState.camera_height)
+    reviewMetaState.camera_height = localStorage.getItem('oa_last_camera_height') || null;
+  if (!reviewMetaState.camera_distance)
+    reviewMetaState.camera_distance = localStorage.getItem('oa_last_camera_distance') || null;
 
   IMAGE_METADATA_SCHEMA.forEach((fieldDef) => {
     const group = document.createElement('div');
@@ -1370,6 +1468,10 @@ document.getElementById('btn-review-confirm').addEventListener('click', async ()
   });
   await saveImageRecord(record);
 
+  // Persist camera values for pre-fill on the next image in this session
+  if (record.camera_height)   localStorage.setItem('oa_last_camera_height',   record.camera_height);
+  if (record.camera_distance) localStorage.setItem('oa_last_camera_distance', record.camera_distance);
+
   confirmedAnnotations = [];
   currentAnnotation    = null;
   reviewMetaState      = {};
@@ -1471,7 +1573,7 @@ async function init() {
   const { annotator, sessionId } = getSession();
   showScreen('home');
   if (!annotator || !sessionId) {
-    openSetupModal();
+    await openStartupModal();
   } else {
     await applySession();
   }

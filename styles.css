@@ -825,6 +825,63 @@ textarea.notes-field:focus {
   vertical-align: middle;
 }
 
+/* ── Session picker in setup modal ────────────────────────── */
+#setup-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.setup-session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.setup-session-row:active {
+  border-color: var(--color-primary);
+  background: var(--color-bg);
+}
+
+.setup-session-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-session-id {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+.setup-session-meta {
+  font-size: 0.75rem;
+  color: var(--color-panel-alt);
+}
+
+.setup-session-count {
+  font-size: 0.75rem;
+  color: var(--color-panel-alt);
+  flex-shrink: 0;
+}
+
 /* ── Loading / spinner ─────────────────────────────────────── */
 .spinner {
   width: 32px;
