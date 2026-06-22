@@ -6,7 +6,7 @@ A Progressive Web App (PWA) for field annotation of olive knot disease (*Pseudom
 
 ## Overview
 
-OliveAnnotate is a v0 manual annotation tool. Its primary purpose is to generate ground-truth training data and zero-shot evaluation datasets for a future SAM2 (Segment Anything Model 2) segmentation pipeline. Annotators in the field can capture photos, draw bounding boxes or polygons around individual galls, classify each annotation, and export structured JSON + JPEG packages to a computer for downstream model training.
+OliveAnnotate is a manual annotation tool. Its primary purpose is to generate ground-truth training data and zero-shot evaluation datasets for a future SAM2 (Segment Anything Model 2) segmentation pipeline. Annotators in the field can capture photos, draw bounding boxes or polygons around individual galls, classify each annotation, record structured image-level metadata, and export packaged JSON + JPEG files to a computer for downstream model training.
 
 ---
 
@@ -31,14 +31,16 @@ OliveAnnotate is a v0 manual annotation tool. Its primary purpose is to generate
 
 ```
 OliveAnnotate/
-├── index.html          # App shell — all four screens in DOM; CDN script tags
-├── app.js              # All application logic (~930 lines, no dependencies)
+├── index.html          # App shell — all four screens in DOM; CDN script tags; modals
+├── app.js              # All application logic (~1,580 lines, no dependencies)
 ├── styles.css          # CSS custom properties; responsive layout; no preprocessor
 ├── manifest.json       # PWA manifest — name, icons, display: standalone
 ├── service-worker.js   # Cache-first SW; caches app shell + CDN resources on install
 ├── icons/
-│   ├── icon-192.svg    # Home screen icon (olive branch + "OA" monogram)
-│   └── icon-512.svg    # Splash / high-res icon
+│   ├── icon-192.png    # Home screen icon (olive branch + "OA" monogram)
+│   ├── icon-512.png    # Splash / high-res icon
+│   ├── icon-192.svg    # SVG source
+│   └── icon-512.svg    # SVG source
 └── QA_CHECKLIST.md     # Cross-device test protocol
 ```
 
@@ -57,8 +59,20 @@ IndexedDB database: `olive-annotate-db` (version 1), two object stores:
   "image_blob_key": "<same uuid>",
   "image_width": 4032,
   "image_height": 3024,
-  "image_rating": 3,
-  "notes": "Manzanilla, NW scaffold, overcast",
+  "device_ua": "Mozilla/5.0 ...",
+
+  "disease": "present",
+  "cultivar": "Manzanilla",
+  "cultivar_susceptibility": "high",
+  "kluepfal_rating": 3,
+  "camera_height": "1.5 m",
+  "camera_distance": "0.5 m",
+  "camera_angle": "45°",
+  "gall_distribution": "75_175cm",
+  "bark_texture": "rough",
+  "image_lighting": "overcast",
+  "notes": "NW-facing scaffold, partial shade",
+
   "annotations": [ ... ],
   "status": "pending | annotated"
 }
@@ -66,7 +80,18 @@ IndexedDB database: `olive-annotate-db` (version 1), two object stores:
 
 **`blobs`** — one record per captured photo (key: `id`), stores the raw JPEG Blob. Kept separate from `images` so metadata queries never deserialise multi-MB payloads.
 
-**Session identity** is stored in `localStorage` (`oa_annotator`, `oa_session`). Records are filtered by `session` string on read, so multiple field sessions coexist in the same browser without interference.
+**Session identity** is stored in `localStorage`:
+
+| Key | Description |
+|-----|-------------|
+| `oa_annotator` | Annotator name |
+| `oa_session` | Active session ID |
+| `oa_location` | Optional field location (e.g. "Corning, CA — Block 4") |
+| `oa_sessions_registry` | JSON map of all known sessions → `{ annotator, location }`, used to populate the startup session picker |
+| `oa_last_camera_height` | Most recently confirmed camera height; pre-fills the next image in the same session |
+| `oa_last_camera_distance` | Most recently confirmed camera distance; pre-fills the next image in the same session |
+
+Records are filtered by the `session` string on read, so multiple field sessions coexist in the same browser without interference.
 
 ### Annotation coordinate system
 
@@ -81,25 +106,52 @@ Stored polygon: `[[x0,y0], [x1,y1], ...]` in image pixels.
 
 This means exported annotations are device-independent and can be directly overlaid on the original JPEG regardless of screen size.
 
-### Classification schema
+### Annotation classification schema
 
-Driven by a single `CLASSIFICATION_SCHEMA` array in `app.js`. Adding or removing a field requires editing only that array — the chip UI, validation logic, and JSON output all update automatically.
+Driven by the `CLASSIFICATION_SCHEMA` array in `app.js`. Adding or removing a field requires editing only that array — the chip UI, validation logic, and JSON output all update automatically.
 
-| Field | Options |
-|-------|---------|
-| Severity | 0 – Absent, 1 – Scattered, 2 – Moderate, 3 – Substantial, 4 – Extreme |
-| Gall Age | Fresh, Aged, Old |
-| Location | Trunk, Scaffold, Lateral, Shoot |
-| Confidence | Sure, Unsure, Flag Expert |
+| Field | Type | Required | Options |
+|-------|------|----------|---------|
+| Type (`annotation_type`) | single-select | **yes** | Gall, Shadow, Scar, Pruning Callus, Bark, Other |
+| Gall Stage (`gall_stage`) | single-select | no | Fresh, Aged, Old |
+| Gall Texture (`gall_texture`) | **multi-select** | no | Cracking, Rugose, Smooth |
+| Location on Tree (`location_on_tree`) | single-select | no | Trunk, Branch Union, Branch Base, Scaffold, Shoot |
+| Lighting (`lighting`) | single-select | no | Sun-Exposed, Shaded |
+
+`gall_texture` is stored as a JSON array (e.g. `["cracking", "rugose"]`). All other classification fields are strings or `null`.
+
+`annotation_type` is named differently from the annotation's drawing `type` field (`"bbox"` or `"polygon"`) to avoid collision in the same JSON object.
+
+### Image-level metadata schema
+
+Collected on the Review screen after annotation. Driven by `IMAGE_METADATA_SCHEMA` in `app.js`; the form is fully schema-driven — the same pattern as the classification panel.
+
+| Field | Input type | Required | Options / format |
+|-------|-----------|----------|-----------------|
+| Disease (`disease`) | chips | **yes** | Present, Absent |
+| Cultivar (`cultivar`) | text | no | free text |
+| Cultivar Susceptibility (`cultivar_susceptibility`) | chips | no | High, Moderate, Low |
+| Kluepfal Rating (`kluepfal_rating`) | chips | no | 0 – 9 |
+| Camera Height (`camera_height`) | text | no | free text; auto-filled from previous image in session |
+| Camera Distance (`camera_distance`) | text | no | free text; auto-filled from previous image in session |
+| Camera Angle (`camera_angle`) | text | no | free text |
+| Gall Distribution (`gall_distribution`) | chips | no | <75 cm, 75–175 cm, >175 cm |
+| Bark Texture (`bark_texture`) | chips | no | Smooth, Rough, Other |
+| Lighting (`image_lighting`) | chips | no | Overcast, Sunny, Intermittent |
+| Notes (`notes`) | textarea | no | free text |
+
+The Confirm button is blocked until Disease is selected. Camera Height and Camera Distance values are written to `localStorage` on Confirm and pre-filled automatically for the next image in the same session; they are cleared when switching to a different session.
+
+`image_lighting` is named differently from the annotation-level `lighting` field to avoid ambiguity in the exported JSON.
 
 ### Export format
 
-ZIP file named `OliveAnnotate_<sessionId>_<YYYY-MM-DD>.zip`:
+ZIP file named `<sessionId>_annotations.zip`:
 
 ```
-OliveAnnotate_COR_2025_06_25_R04_2025-06-25.zip
+COR_2025_06_25_R04_annotations.zip
 ├── session_metadata.json
-├── IMG_<uuid>.jpg               # STORE (no re-compression of JPEG)
+├── IMG_<uuid>.jpg               # STORE compression (no JPEG re-encoding)
 ├── IMG_<uuid>_annotations.json  # DEFLATE level 6
 └── ...
 ```
@@ -109,42 +161,58 @@ OliveAnnotate_COR_2025_06_25_R04_2025-06-25.zip
 {
   "session": "COR_2025_06_25_R04",
   "annotator": "J. Smith",
+  "location": "Corning, CA — Block 4",
   "exported_at": "2025-06-25T18:00:00.000Z",
-  "image_count": 12
+  "image_count": 12,
+  "annotated_count": 10
 }
 ```
 
-Per-image annotation JSON:
+`location` is omitted when blank. `annotated_count` counts images whose status is `"annotated"`.
+
+Per-image annotation JSON (full image record as stored in IndexedDB):
 ```json
 {
   "id": "<uuid>",
-  "session": "...",
-  "annotator": "...",
-  "captured_at": "...",
+  "session": "COR_2025_06_25_R04",
+  "annotator": "J. Smith",
+  "captured_at": "2025-06-25T14:32:00.000Z",
   "image_width": 4032,
   "image_height": 3024,
-  "image_rating": 3,
-  "notes": "...",
+  "disease": "present",
+  "cultivar": "Manzanilla",
+  "cultivar_susceptibility": "high",
+  "kluepfal_rating": 3,
+  "camera_height": "1.5 m",
+  "camera_distance": "0.5 m",
+  "camera_angle": null,
+  "gall_distribution": "75_175cm",
+  "bark_texture": "rough",
+  "image_lighting": "overcast",
+  "notes": null,
   "annotations": [
     {
       "id": "<uuid>",
       "type": "bbox",
       "coords": { "x": 310, "y": 240, "w": 85, "h": 72 },
-      "severity": 2,
-      "gall_age": "aged",
-      "location": "scaffold",
-      "confidence": "sure"
+      "annotation_type": "gall",
+      "gall_stage": "aged",
+      "gall_texture": ["cracking", "rugose"],
+      "location_on_tree": "scaffold",
+      "lighting": "sun_exposed"
     },
     {
       "id": "<uuid>",
       "type": "polygon",
       "points": [[310,240],[395,241],[390,310],[312,312]],
-      "severity": 1,
-      "gall_age": "fresh",
-      "location": "shoot",
-      "confidence": "unsure"
+      "annotation_type": "gall",
+      "gall_stage": "fresh",
+      "gall_texture": [],
+      "location_on_tree": "shoot",
+      "lighting": null
     }
-  ]
+  ],
+  "status": "annotated"
 }
 ```
 
@@ -155,41 +223,55 @@ Per-image annotation JSON:
 ### Screen flow
 
 ```
-Setup modal (first launch)
+Startup modal (session picker or new-session form)
         ↓
 [S1] Session Home  ──── + New Image ────→ [S2] Camera Capture
         ↑                                         ↓ (capture / library)
         └──── Confirm ──── [S3b] Review ←── [S3] Annotation Canvas
 ```
 
+### Startup / session picker
+
+On first launch the app shows a blank new-session form. On subsequent launches, if no session is active, the app shows a **"Welcome Back"** picker listing all previous sessions stored on the device. Each row shows the session ID, annotator name, location, and image count. Tapping a row resumes that session immediately (one tap, no re-typing). A **+ Create New Session** button drops into the blank form.
+
 ### Session Home (S1)
-- Displays a scrollable grid of all images captured in the current session
-- Each card shows a thumbnail, capture timestamp, and annotation count
-- Progress bar shows how many images have at least one confirmed annotation
-- **Export** generates and delivers the ZIP for the entire session
-- **⚙ Settings** re-opens the setup modal to change annotator name or switch sessions (entering the same Session ID resumes the existing session)
+
+- Scrollable grid of all images captured in the current session
+- Each card shows a thumbnail, status badge (pending / annotated), and annotation count
+- Progress bar tracks confirmed vs. total images
+- **+ New Image** — opens camera capture
+- **Export** — generates and delivers the ZIP for the entire session
+- **New Session** — opens the new-session form (keeps annotator name, clears session ID and location)
+- **Edit Session** — opens the session form pre-filled with current values
+- **All Sessions** — opens a modal listing every session stored on the device (by session ID, with image count and Active badge); each entry has a **Delete** button that removes all images and annotations for that session after confirmation; deleting the active session clears the active state and prompts for a new one
+- **⚙** — placeholder button (disabled; reserved for future settings)
 
 ### Camera Capture (S2)
+
 - Opens rear camera via `getUserMedia`
-- **Library** button accepts any image from the device photo library (useful when photos were pre-captured)
+- **Library** button accepts any image from the device photo library
 - Camera stream is stopped immediately on exit to release hardware
+- On Android devices with multiple cameras, a camera selector dropdown is shown
 
 ### Annotation Canvas (S3)
-- Image is scaled to fit the screen with `displayScale`; canvas dimensions match
+
+- Image scaled to fit the screen with `displayScale`; canvas dimensions match
 - **Bounding box tool** (default): drag to draw; rubber-band preview follows pointer in real time
 - **Polygon tool**: tap to place vertices; dashed live-preview line from last vertex to current pointer; snap ring on first vertex when 3+ points are placed; tap first vertex or press **Close** to finalise
-- **↩ Undo**: removes the last confirmed annotation, or the last in-progress polygon vertex if a polygon is being drawn
+- **↩ Undo**: if classification panel is open, discards the pending annotation; if a polygon is in progress, removes the last vertex; otherwise removes the last confirmed annotation
 - **Done**: discards any unfinished annotation and opens the Review screen
-- Classification panel opens after each annotation is drawn. In landscape the panel overlays from the right; in portrait it overlays from the bottom. The panel is `position: absolute` so it never changes `displayScale` or shifts stored coordinates
-- Each **Save** click writes intermediate state to IndexedDB (crash recovery)
+- **Classification panel** opens after each annotation is drawn; overlays from the right (landscape) or bottom (portrait) without affecting `displayScale` or stored coordinates
+- **Save** writes intermediate state to IndexedDB (crash recovery); blocked until the required Type field is selected
 - **Reject** discards the pending annotation without saving
 
 ### Review Screen (S3b)
-- Lists all confirmed annotations as instance cards with cropped thumbnails
-- Optional 0–10 image rating (Kluepfel scale for disease severity at the tree level)
-- Free-text notes field (cultivar, lighting conditions, canopy position, etc.)
-- **Confirm** writes the final authoritative record to IndexedDB and returns to Session Home
-- **Back** returns to the annotation canvas without saving review data
+
+- Lists all confirmed annotations as instance cards with cropped thumbnails, drawing type, and classification summary
+- Each instance card has a **✕** delete button to remove that annotation
+- **Image metadata form** collects structured data about the whole image (see schema above); Disease is required, all other fields optional; Confirm is blocked until Disease is selected
+- Camera Height and Camera Distance are pre-filled from the previously confirmed image in the same session
+- **Confirm** writes the final authoritative record (annotations + metadata) to IndexedDB and returns to Session Home
+- **Back** returns to the annotation canvas without saving review-screen data
 
 ---
 
@@ -236,16 +318,14 @@ OliveAnnotate must be served over HTTPS for camera access and service worker reg
 - **HTTPS required at runtime.** `getUserMedia` (camera) and service workers are blocked on plain HTTP origins. The only exception is `localhost` for local development.
 - **No background sync.** All data stays on the capturing device. Moving data to a server or another device requires the manual Export → ZIP flow.
 - **iOS storage quota.** Safari may evict PWA storage (IndexedDB + cache) under memory pressure. Apple's Storage API does not allow requesting persistent storage on iOS. Always export before clearing the app or leaving the device idle for extended periods.
-- **SVG icons.** App icons are SVG, not PNG. Android Chrome and modern iOS Safari support SVG manifests; however, some older Android launchers may not render the icon correctly. Converting `icon-192.svg` and `icon-512.svg` to PNG is straightforward with any image editor and is recommended for broad deployment.
 - **Single-device, single-session.** There is no sync mechanism. Two annotators working on the same session ID from different devices will produce separate, non-merged ZIP exports.
 
 ### Annotation constraints
-- **Manual annotation only.** v0 has no AI-assisted pre-labelling, no SAM2 integration, and no smart segmentation. Every annotation is drawn by hand.
-- **No annotation editing.** Once an annotation is saved, it cannot be moved, resized, or re-classified. The only correction available is Undo (which removes the annotation entirely) followed by redrawing.
+- **Manual annotation only.** No AI-assisted pre-labelling, no SAM2 integration, and no smart segmentation. Every annotation is drawn by hand.
+- **No annotation editing.** Once an annotation is saved it cannot be moved, resized, or re-classified. The only correction available is deleting the annotation on the Review screen and redrawing it.
 - **Bounding boxes are axis-aligned only.** There is no rotated-rectangle tool.
 - **Polygons have no vertex dragging.** Vertices are placed by tap only; repositioning requires Undo back to that vertex.
 - **No pan/zoom on the annotation canvas.** The image is scaled to fit the screen. On small phones with very high-resolution captures, fine-grained annotation of small galls may be difficult.
-- **No per-annotation undo after intermediate saves.** Undo removes annotations in reverse chronological order from the in-memory list; once you navigate away (Done → Confirm), the history is gone.
 
 ### Export constraints
 - **One export per session, all images.** There is no selective export (e.g. "only annotated images" or a date range filter). The ZIP always contains every image captured under the current session ID.
@@ -255,27 +335,24 @@ OliveAnnotate must be served over HTTPS for camera access and service worker reg
 
 ## Future Work
 
-The items below are out of scope for v0 but represent the natural next steps toward a production annotation and training pipeline.
-
-### Near-term (v0.x)
+### Near-term
 
 - **Pan and zoom on annotation canvas.** Pinch-to-zoom with pointer events so annotators can work at full image resolution on small galls.
 - **Annotation editing.** Tap a saved annotation to select it; drag handles to resize (bbox) or drag individual vertices (polygon).
 - **Selective export.** Filter by status (`annotated`, `pending`) or date range before generating the ZIP.
-- **PNG icons.** Generate `icon-192.png` and `icon-512.png` from the SVG sources for full launcher compatibility.
 - **Persistent storage request.** Call `navigator.storage.persist()` on Android to prevent Chrome from evicting IndexedDB data under storage pressure.
 - **Back-button / swipe navigation hardening.** Android hardware back button currently does nothing; should map to the contextual back action for the active screen.
+- **Settings screen.** The ⚙ placeholder button on the session home is reserved for app-level settings (e.g. snap radius, default tool, export options).
 
-### Medium-term (v1)
+### Medium-term
 
 - **SAM2 pre-segmentation.** Run SAM2 in the browser via ONNX Runtime Web or on a companion server; use the annotator's bounding box as the prompt and auto-generate a polygon mask for review.
 - **Inter-annotator agreement UI.** When two annotators annotate the same image independently, show an overlay comparison and IoU scores to help resolve disagreements.
 - **Cloud sync.** Optional upload of confirmed records to a shared S3 bucket or Supabase instance so multiple field devices contribute to one dataset.
 - **Session merging.** Merge two ZIP exports from different annotators working the same orchard row, deduplicating by image UUID and flagging conflicts.
-- **Cultivar and orchard metadata.** Add a structured field (dropdown + free text) to record orchard block, row, tree number, and cultivar at the session level, surfaced in the export JSON.
-- **Kluepfel rating guidance.** In-app reference card with photo examples of each 0–10 rating level to improve inter-annotator consistency.
+- **Kluepfal rating reference card.** In-app photo examples of each 0–9 rating level to improve inter-annotator consistency.
 
-### Long-term (v2+)
+### Long-term
 
 - **COCO / YOLO export formats.** Produce annotation files directly in COCO JSON or YOLO `.txt` format alongside (or instead of) the current custom JSON, so datasets can be fed to training pipelines without a conversion step.
 - **Active learning queue.** Prioritise images where a model is least confident for human review, surfaced directly in the session home grid.
@@ -296,7 +373,7 @@ python3 -m http.server 8080
 
 For iOS testing on a physical device, the server must be reachable over HTTPS. Use a tunnelling tool (e.g. `ngrok`) or deploy to a static host (GitHub Pages, Netlify).
 
-All application logic is in `app.js`. The classification schema, colour palette, and snap threshold are the only "configuration" values — they live at the top of their respective files and are commented accordingly.
+All application logic is in `app.js`. The two schema arrays (`CLASSIFICATION_SCHEMA` and `IMAGE_METADATA_SCHEMA`), the colour palette (`styles.css` `:root`), and the polygon snap threshold (`SNAP_RADIUS`) are the main configuration points — they are commented and grouped at the top of their respective sections.
 
 ---
 
