@@ -700,44 +700,27 @@ html, body {
   padding: 4px 0 8px;
 }
 
-.review-meta {
+#review-meta {
   margin-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
-.rating-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-panel-alt);
-  margin-bottom: 6px;
+/* Chips inside the light-background review form need dark text */
+#review-meta .chip {
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
-.rating-strip {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.rating-btn {
-  min-width: 38px;
-  min-height: 38px;
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-family: var(--font);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.12s, border-color 0.12s;
-}
-
-.rating-btn.selected {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+#review-meta .chip.selected {
   color: #fff;
+  border-color: var(--color-primary);
+}
+
+#review-meta .field-group input {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 textarea.notes-field {

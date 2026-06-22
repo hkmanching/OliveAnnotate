@@ -333,10 +333,19 @@ async function storeNewImage(blob, width, height) {
     image_height:   height,
     annotator,
     device_ua:      navigator.userAgent,
-    image_rating:   null,
-    notes:          '',
-    annotations:    [],
-    status:         'pending',
+    disease:               null,
+    cultivar:              null,
+    cultivar_susceptibility: null,
+    kluepfal_rating:       null,
+    camera_height:         null,
+    camera_distance:       null,
+    camera_angle:          null,
+    gall_distribution:     null,
+    bark_texture:          null,
+    image_lighting:        null,
+    notes:                 null,
+    annotations:           [],
+    status:                'pending',
   };
   await saveImageRecord(record);
   stopCamera();
@@ -933,7 +942,7 @@ async function openAnnotateScreen(imageId) {
   polygonPoints        = [];
   polygonLivePos       = null;
   polyTapStart         = null;
-  selectedRating       = null;
+  reviewMetaState      = {};
   closeClassificationPanel();
   resetClassificationPanel();
   setTool('bbox');
@@ -950,31 +959,160 @@ async function openAnnotateScreen(imageId) {
 }
 
 // ── Review state ──────────────────────────────────────────────
-let selectedRating = null;
+let reviewMetaState = {};
 
-function buildRatingStrip(preselected = null) {
-  const strip   = document.getElementById('rating-strip');
-  strip.innerHTML = '';
-  selectedRating  = preselected;
-  for (let i = 0; i <= 10; i++) {
-    const btn = document.createElement('button');
-    btn.type      = 'button';
-    btn.className = 'rating-btn';
-    btn.textContent = String(i);
-    const sel = (i === preselected);
-    if (sel) btn.classList.add('selected');
-    btn.setAttribute('aria-pressed', String(sel));
-    btn.addEventListener('click', () => {
-      strip.querySelectorAll('.rating-btn').forEach((b) => {
-        b.classList.remove('selected');
-        b.setAttribute('aria-pressed', 'false');
-      });
-      btn.classList.add('selected');
-      btn.setAttribute('aria-pressed', 'true');
-      selectedRating = i;
+// ── Image metadata schema ─────────────────────────────────────
+const IMAGE_METADATA_SCHEMA = [
+  {
+    field: 'disease', label: 'Disease', required: true, inputType: 'chips',
+    options: [
+      { value: 'present', label: 'Present' },
+      { value: 'absent',  label: 'Absent' },
+    ],
+  },
+  {
+    field: 'cultivar', label: 'Cultivar', required: false, inputType: 'text',
+    placeholder: 'e.g. Manzanilla',
+  },
+  {
+    field: 'cultivar_susceptibility', label: 'Cultivar Susceptibility', required: false, inputType: 'chips',
+    options: [
+      { value: 'high',     label: 'High' },
+      { value: 'moderate', label: 'Moderate' },
+      { value: 'low',      label: 'Low' },
+    ],
+  },
+  {
+    field: 'kluepfal_rating', label: 'Kluepfal Rating', required: false, inputType: 'chips',
+    options: [0,1,2,3,4,5,6,7,8,9].map((n) => ({ value: n, label: String(n) })),
+  },
+  {
+    field: 'camera_height', label: 'Camera Height', required: true, inputType: 'text',
+    placeholder: 'e.g. 1.5 m',
+  },
+  {
+    field: 'camera_distance', label: 'Camera Distance', required: true, inputType: 'text',
+    placeholder: 'e.g. 0.5 m',
+  },
+  {
+    field: 'camera_angle', label: 'Camera Angle', required: false, inputType: 'text',
+    placeholder: 'e.g. 45°',
+  },
+  {
+    field: 'gall_distribution', label: 'Gall Distribution', required: false, inputType: 'chips',
+    options: [
+      { value: 'lt_75cm',  label: '<75 cm' },
+      { value: '75_175cm', label: '75–175 cm' },
+      { value: 'gt_175cm', label: '>175 cm' },
+    ],
+  },
+  {
+    field: 'bark_texture', label: 'Bark Texture', required: false, inputType: 'chips',
+    options: [
+      { value: 'smooth', label: 'Smooth' },
+      { value: 'rough',  label: 'Rough' },
+      { value: 'other',  label: 'Other' },
+    ],
+  },
+  {
+    field: 'image_lighting', label: 'Lighting', required: false, inputType: 'chips',
+    options: [
+      { value: 'overcast',     label: 'Overcast' },
+      { value: 'sunny',        label: 'Sunny' },
+      { value: 'intermittent', label: 'Intermittent' },
+    ],
+  },
+  {
+    field: 'notes', label: 'Notes', required: false, inputType: 'textarea',
+    placeholder: 'Additional notes…',
+  },
+];
+
+function updateConfirmButtonState() {
+  const missingRequired = IMAGE_METADATA_SCHEMA
+    .filter((f) => f.required)
+    .some((f) => {
+      const v = reviewMetaState[f.field];
+      return f.inputType === 'text' ? !v?.trim() : v === null;
     });
-    strip.appendChild(btn);
-  }
+  const btn = document.getElementById('btn-review-confirm');
+  btn.style.opacity = missingRequired ? '0.45' : '1';
+  btn.dataset.ready  = missingRequired ? 'false' : 'true';
+}
+
+function buildReviewMetaForm(record) {
+  const container = document.getElementById('review-meta');
+  container.innerHTML = '';
+
+  reviewMetaState = {};
+  IMAGE_METADATA_SCHEMA.forEach(({ field }) => {
+    reviewMetaState[field] = record[field] ?? null;
+  });
+
+  IMAGE_METADATA_SCHEMA.forEach((fieldDef) => {
+    const group = document.createElement('div');
+    group.className = 'field-group';
+
+    const labelEl = document.createElement('label');
+    labelEl.textContent = fieldDef.label + (fieldDef.required ? ' *' : '');
+    group.appendChild(labelEl);
+
+    if (fieldDef.inputType === 'chips') {
+      const chipRow = document.createElement('div');
+      chipRow.className = 'chip-row';
+      chipRow.setAttribute('role', 'group');
+      chipRow.setAttribute('aria-label', fieldDef.label);
+      fieldDef.options.forEach((opt) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip';
+        chip.textContent = opt.label;
+        const isSel = reviewMetaState[fieldDef.field] === opt.value;
+        chip.classList.toggle('selected', isSel);
+        chip.setAttribute('aria-pressed', String(isSel));
+        chip.addEventListener('click', () => {
+          chipRow.querySelectorAll('.chip').forEach((c) => {
+            c.classList.remove('selected');
+            c.setAttribute('aria-pressed', 'false');
+          });
+          chip.classList.add('selected');
+          chip.setAttribute('aria-pressed', 'true');
+          reviewMetaState[fieldDef.field] = opt.value;
+          updateConfirmButtonState();
+        });
+        chipRow.appendChild(chip);
+      });
+      group.appendChild(chipRow);
+
+    } else if (fieldDef.inputType === 'text') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = fieldDef.placeholder || '';
+      input.value = reviewMetaState[fieldDef.field] || '';
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('autocorrect', 'off');
+      input.setAttribute('spellcheck', 'false');
+      input.addEventListener('input', () => {
+        reviewMetaState[fieldDef.field] = input.value;
+        updateConfirmButtonState();
+      });
+      group.appendChild(input);
+
+    } else if (fieldDef.inputType === 'textarea') {
+      const ta = document.createElement('textarea');
+      ta.className = 'notes-field';
+      ta.placeholder = fieldDef.placeholder || '';
+      ta.value = reviewMetaState[fieldDef.field] || '';
+      ta.addEventListener('input', () => {
+        reviewMetaState[fieldDef.field] = ta.value;
+      });
+      group.appendChild(ta);
+    }
+
+    container.appendChild(group);
+  });
+
+  updateConfirmButtonState();
 }
 
 async function generateAllCropThumbnails(annotations, blob) {
@@ -1071,8 +1209,7 @@ async function renderReviewInstanceList() {
 
 async function openReviewScreen() {
   const record = await getImageRecord(currentImageId);
-  buildRatingStrip(record.image_rating);
-  document.getElementById('notes-field').value = record.notes || '';
+  buildReviewMetaForm(record);
   showScreen('review');
   await renderReviewInstanceList();
 }
@@ -1087,16 +1224,32 @@ document.getElementById('btn-review-back-2').addEventListener('click', handleRev
 
 document.getElementById('btn-review-confirm').addEventListener('click', async () => {
   if (!currentImageId) return;
-  const record        = await getImageRecord(currentImageId);
-  record.annotations  = [...confirmedAnnotations];
-  record.status       = confirmedAnnotations.length > 0 ? 'annotated' : 'pending';
-  record.image_rating = selectedRating;
-  record.notes        = document.getElementById('notes-field').value.trim();
+  if (document.getElementById('btn-review-confirm').dataset.ready === 'false') {
+    const missing = IMAGE_METADATA_SCHEMA
+      .filter((f) => f.required)
+      .filter((f) => {
+        const v = reviewMetaState[f.field];
+        return f.inputType === 'text' ? !v?.trim() : v === null;
+      })
+      .map((f) => f.label);
+    showToast(`Required: ${missing.join(', ')}`);
+    return;
+  }
+
+  const record       = await getImageRecord(currentImageId);
+  record.annotations = [...confirmedAnnotations];
+  record.status      = confirmedAnnotations.length > 0 ? 'annotated' : 'pending';
+  IMAGE_METADATA_SCHEMA.forEach(({ field, inputType }) => {
+    const v = reviewMetaState[field];
+    record[field] = (inputType === 'text' || inputType === 'textarea')
+      ? (v?.trim() || null)
+      : v;
+  });
   await saveImageRecord(record);
 
   confirmedAnnotations = [];
   currentAnnotation    = null;
-  selectedRating       = null;
+  reviewMetaState      = {};
   if (currentImageBitmap) { currentImageBitmap.close(); currentImageBitmap = null; }
 
   showScreen('home');

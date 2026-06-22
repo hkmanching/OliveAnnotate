@@ -136,19 +136,9 @@
           <!-- Instance cards injected by JS -->
         </div>
 
-        <div class="review-meta">
-          <div>
-            <p class="rating-label">Image rating (0–10, Kluepfel scale — optional)</p>
-            <div class="rating-strip" id="rating-strip" role="group" aria-label="Image rating">
-              <!-- Buttons 0–10 injected by JS -->
-            </div>
-          </div>
-
-          <div class="field-group" style="user-select:text; -webkit-user-select:text">
-            <label for="notes-field">Notes (cultivar, lighting, canopy position…)</label>
-            <textarea class="notes-field" id="notes-field"
-                      placeholder="e.g. Manzanilla, NW-facing scaffold, overcast"></textarea>
-          </div>
+        <div id="review-meta" role="form" aria-label="Image metadata"
+             style="user-select:text; -webkit-user-select:text">
+          <!-- Field groups injected by buildReviewMetaForm() -->
         </div>
       </div>
 
