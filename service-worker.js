@@ -1,4 +1,5 @@
-const CACHE_NAME = 'olive-annotate-v1';
+const VERSION    = '1.0';
+const CACHE_NAME = `olive-annotate-v${VERSION}`;
 
 const APP_SHELL = [
   './',
